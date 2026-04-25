@@ -1,0 +1,52 @@
+FROM debian:buster-slim
+
+RUN echo "deb http://archive.debian.org/debian/ buster main contrib non-free" > /etc/apt/sources.list && \
+    echo "deb http://archive.debian.org/debian-security/ buster/updates main contrib non-free" >> /etc/apt/sources.list && \
+    echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid-until
+
+RUN apt-get update && \
+  DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+  apt-utils \
+  wget \
+  bmake \
+  build-essential \
+  bzip2 \
+  ca-certificates \
+  curl \
+  devscripts \
+  dh-make \
+  fakeroot \
+  git \
+  libcap-dev \
+  libelf-dev \
+  libseccomp-dev \
+  lintian \
+  lsb-release \
+  m4 \
+  pkg-config \
+  xz-utils && \
+  rm -rf /var/lib/apt/lists/*
+
+ENV OS_ARCH="amd64"
+ENV GOLANG_VERSION="1.25.6"
+RUN wget -qO- https://go.dev/dl/go${GOLANG_VERSION}.linux-${OS_ARCH}.tar.gz | tar -C /usr/local -xz
+ENV GOPATH=/go
+ENV PATH=$GOPATH/bin:/usr/local/go/bin:$PATH
+ENV DATA_DIR=/tmp
+
+COPY daemon.json /opt/daemon.json
+
+RUN chmod -R 777 /opt
+
+ENV GPG_TTY=/dev/console
+
+CMD bash -c "cd ${DATA_DIR} && \
+  git clone --depth 1 --branch v${LIBNVIDIA_VERSION} https://github.com/NVIDIA/libnvidia-container.git && \
+  cd ${DATA_DIR}/libnvidia-container && \
+  git checkout v${LIBNVIDIA_VERSION} && \
+  DESTDIR=${DATA_DIR}/libnvidia-container-${LIBNVIDIA_VERSION} make LIB_VERSION=${LIBNVIDIA_VERSION} LIB_TAG=${LIBNVIDIA_VERSION} install prefix=/usr GO111MODULE=auto && \
+  mkdir -p ${DATA_DIR}/libnvidia-container-${LIBNVIDIA_VERSION}/etc/docker && \
+  cp /opt/daemon.json ${DATA_DIR}/libnvidia-container-${LIBNVIDIA_VERSION}/etc/docker/daemon.json && \
+  cd ${DATA_DIR}/libnvidia-container-${LIBNVIDIA_VERSION} && \
+  mkdir ${DATA_DIR}/v${LIBNVIDIA_VERSION} && \
+  tar cfvz ${DATA_DIR}/v${LIBNVIDIA_VERSION}/libnvidia-container-v${LIBNVIDIA_VERSION}.tar.gz *"
